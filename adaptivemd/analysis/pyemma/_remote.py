@@ -103,12 +103,10 @@ def remote_analysis(
         return cl
     ### END GUILLE'S CODE
 
-    # clr = coor.cluster_regspace(data=Y, dmin=0.5)
-    # cl = coor.cluster_kmeans(data=Y, k=args.msm_states, stride=args.stride)
     cl = regspace_cluster_to_target(y, msm_states,
                                     delta=int(msm_states/10),
                                     stride=stride)
-
+    m = pyemma.msm.estimate_markov_model(cl.dtrajs, msm_lag)
 
     #cl = pyemma.coordinates.cluster_kmeans(data=y, k=msm_states, stride=stride)
 
@@ -120,10 +118,7 @@ def remote_analysis(
             'n_trajectories': inp.number_of_trajectories(),
             'lengths': inp.trajectory_lengths(),
         },
-        'tica': {
-            'dimension': tica_obj.dimension(),
-            'lagtime': tica_lag
-        },
+
         'clustering': {
             'k': msm_states,
             'dtrajs': [
