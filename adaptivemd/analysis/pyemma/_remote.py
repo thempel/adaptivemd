@@ -36,9 +36,12 @@ def remote_analysis(
         information about the computed MSM
     """
     import pyemma
+    import numpy as np
 
     feat = pyemma.coordinates.featurizer(topfile)
-    feat.add_backbone_torsions()
+
+    selection = feat.select_Heavy()
+    feat.add_selection(selection)
 
     pyemma.config.show_progress_bars = False
 
@@ -51,14 +54,64 @@ def remote_analysis(
 
     inp = pyemma.coordinates.source(files, feat)
 
-    tica_obj = pyemma.coordinates.tica(
-        inp, lag=tica_lag, dim=tica_dim, kinetic_map=False)
+    #tica_obj = pyemma.coordinates.tica(
+    #    inp, lag=tica_lag, dim=tica_dim, kinetic_map=False)
 
-    y = tica_obj.get_output()
+    y = inp.get_output()
 
-    cl = pyemma.coordinates.cluster_kmeans(data=y, k=msm_states, stride=stride)
+    ### BEGIN GUILLE'S CODE
+    def regspace_cluster_to_target(data, n_clusters_target,
+                                   n_try_max=5, delta=5.,
+                                   verbose=False, stride=1):
+        r"""
+        Clusters a dataset to a target n_clusters using regspace clustering by iteratively. "
+        Work best with 1D data
+        data: ndarray or list thereof
+        n_clusters_target: int, number of clusters.
+        n_try_max: int, default is 5. Maximum number of iterations in the heuristic.
+        delta: float, defalut is 5. Percentage of n_clusters_target to consider converged.
+                 Eg. n_clusters_target=100 and delta = 5 will consider any clustering between 95 and 100 clustercenters as
+                 valid. Note. Note: An off-by-one in n_target_clusters is sometimes unavoidable
+        returns: pyemma clustering object
+        tested:True
+        """
+        delta = delta/100
 
-    m = pyemma.msm.estimate_markov_model(cl.dtrajs, msm_lag)
+        assert np.vstack(data).shape[0] >= n_clusters_target, "Cannot cluster " \
+                                                          "%u datapoints on %u clustercenters. Reduce the number of target " \
+                                                          "clustercenters."%(np.vstack(data).shape[0], n_clusters_target)
+        # Works well for connected, 1D-clustering,
+        # otherwise it's bad starting guess for dmin
+        # cmax = np.vstack(data).max()
+        # cmin = np.vstack(data).min()
+        # dmin = (cmax-cmin)/(n_clusters_target+1)
+        dmin = .2
+        err = np.ceil(n_clusters_target*delta)
+        cl = pyemma.coordinates.cluster_regspace(data, dmin=dmin, stride=stride, metric='minRMSD')
+        for cc in range(n_try_max):
+            n_cl_now = cl.n_clusters
+            delta_cl_now = np.abs(n_cl_now - n_clusters_target)
+            if not n_clusters_target-err <= cl.n_clusters <= n_clusters_target+err:
+                # Cheap (and sometimes bad) heuristic to get relatively close relatively quick
+                dmin = cl.dmin*cl.n_clusters/   n_clusters_target
+                cl = pyemma.coordinates.cluster_regspace(data, dmin=dmin, metric='minRMSD', max_centers=5000, stride=stride)# max_centers is given so that we never reach it (dangerous)
+            else:
+                break
+            if verbose:
+                print('cl iter %u %u -> %u (Delta to target (%u +- %u): %u'%(cc, n_cl_now, cl.n_clusters,
+                                                                             n_clusters_target, err, delta_cl_now))
+        return cl
+    ### END GUILLE'S CODE
+
+    # clr = coor.cluster_regspace(data=Y, dmin=0.5)
+    # cl = coor.cluster_kmeans(data=Y, k=args.msm_states, stride=args.stride)
+    cl = regspace_cluster_to_target(y, msm_states,
+                                    delta=int(msm_states/10),
+                                    stride=stride)
+
+
+    #cl = pyemma.coordinates.cluster_kmeans(data=y, k=msm_states, stride=stride)
+
 
     data = {
         'input': {
