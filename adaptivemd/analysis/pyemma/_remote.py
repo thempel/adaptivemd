@@ -61,8 +61,8 @@ def remote_analysis(
 
     ### BEGIN GUILLE'S CODE
     def regspace_cluster_to_target(data, n_clusters_target,
-                                   n_try_max=5, delta=5.,
-                                   verbose=False, stride=1):
+                                   n_try_max=15, delta=5.,
+                                   verbose=True, stride=1):
         r"""
         Clusters a dataset to a target n_clusters using regspace clustering by iteratively. "
         Work best with 1D data
@@ -103,9 +103,10 @@ def remote_analysis(
         return cl
     ### END GUILLE'S CODE
 
-    cl = regspace_cluster_to_target(y, msm_states,
-                                    delta=int(msm_states/10),
-                                    stride=stride)
+    #cl = regspace_cluster_to_target(y, msm_states,
+    #                                delta=int(msm_states/10),
+    #                                stride=stride)
+    cl = pyemma.coordinates.cluster_regspace(data=y, dmin=.5, stride=stride, max_centers=500)
     m = pyemma.msm.estimate_markov_model(cl.dtrajs, msm_lag)
 
     #cl = pyemma.coordinates.cluster_kmeans(data=y, k=msm_states, stride=stride)
