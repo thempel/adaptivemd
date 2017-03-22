@@ -1,8 +1,6 @@
-from adaptivemd import Model
-
-
 def remote_analysis(
-        files,
+        trajectories,
+        traj_name='output.dcd',
         topfile='input.pdb',
         tica_lag=2,
         tica_dim=2,
@@ -14,8 +12,10 @@ def remote_analysis(
 
     Parameters
     ----------
-    files : list of `Trajectory`
+    trajectories : list of `Trajectory`
         a list of `Trajectory` objects
+    traj_name : str
+        name of the trajectory file with the trajectory directory given
     topfile : `File`
         a reference to the `.pdb` file using in pyemma
     tica_lag : int
@@ -35,29 +35,25 @@ def remote_analysis(
         a model object with a data attribute which is a dict and contains all relevant
         information about the computed MSM
     """
-    import pyemma
+    import os
     import numpy as np
+    import pyemma
+    from adaptivemd import Model
 
     feat = pyemma.coordinates.featurizer(topfile)
 
-    selection = feat.select('protein and mass > 2')[29:-30] 
+    selection = feat.select('protein and mass > 2')[29:-30]
     feat.add_selection(selection)
 
     pyemma.config.show_progress_bars = False
 
-    # todo: allow specification of several folders and wildcats, used for session handling
-    # if isinstance(trajfiles, basestring):
-    #     if '*' in trajfiles or trajfiles.endswith('/'):
-    #         files = glob.glob(trajfiles)
+    print '#trajectories :', len(trajectories)
 
-    print '#files :', len(files)
-
+    files = [os.path.join(t, traj_name) for t in trajectories]
     inp = pyemma.coordinates.source(files, feat)
 
-    #tica_obj = pyemma.coordinates.tica(
-    #    inp, lag=tica_lag, dim=tica_dim, kinetic_map=False)
-
     y = inp.get_output()
+
 
     ### BEGIN GUILLE'S CODE
     def regspace_cluster_to_target(data, n_clusters_target,
@@ -103,13 +99,13 @@ def remote_analysis(
         return cl
     ### END GUILLE'S CODE
 
+    #cl = pyemma.coordinates.cluster_kmeans(data=y, k=msm_states, stride=stride)
     #cl = regspace_cluster_to_target(y, msm_states,
     #                                delta=int(msm_states/10),
     #                                stride=stride)
     cl = pyemma.coordinates.cluster_regspace(data=y, dmin=.22, stride=stride, max_centers=500, metric='minRMSD')
     m = pyemma.msm.estimate_markov_model(cl.dtrajs, msm_lag)
 
-    #cl = pyemma.coordinates.cluster_kmeans(data=y, k=msm_states, stride=stride)
 
 
     data = {
@@ -119,7 +115,6 @@ def remote_analysis(
             'n_trajectories': inp.number_of_trajectories(),
             'lengths': inp.trajectory_lengths(),
         },
-
         'clustering': {
             'k': cl.n_clusters,
             'dtrajs': [
