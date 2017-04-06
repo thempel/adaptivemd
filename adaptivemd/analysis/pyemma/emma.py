@@ -176,16 +176,15 @@ class PyEMMAAnalysis(Analysis):
         for traj in trajectories:
             if traj.engine not in engines:
                 engines.append(traj.engine)
-        trajs = []
+        
         if len(engines) > 1:
+            trajs = []
             for traj in trajectories:
                 trajs.append(os.path.join(traj.location, traj.types[outtype].filename))
             trajectory_file_name = ''
         else:
             trajs = list(trajectories)
             trajectory_file_name = ty.filename
-
-        
 
         t.call(
             remote_analysis,
