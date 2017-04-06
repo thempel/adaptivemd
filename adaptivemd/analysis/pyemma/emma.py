@@ -172,25 +172,10 @@ class PyEMMAAnalysis(Analysis):
 
         ty = trajs[0].types[outtype]
 
-        engines = []
-        for traj in trajectories:
-            if traj.engine not in engines:
-                engines.append(traj.engine)
-        trajs = []
-        if len(engines) > 1:
-            for traj in trajectories:
-                trajs.append(os.path.join(traj.location, traj.types[outtype].filename))
-            trajectory_file_name = ''
-        else:
-            trajs = list(trajectories)
-            trajectory_file_name = ty.filename
-
-        
-
         t.call(
             remote_analysis,
             trajectories=trajs,
-            traj_name=trajectory_file_name,  # we need the filename in the traj folder
+            traj_name=ty.filename,  # we need the filename in the traj folder
             selection=ty.selection,  # tell pyemma the subsets of atoms
             features=features,
             topfile=input_pdb,
