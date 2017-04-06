@@ -1,3 +1,31 @@
+##############################################################################
+# adaptiveMD: A Python Framework to Run Adaptive Molecular Dynamics (MD)
+#             Simulations on HPC Resources
+# Copyright 2017 FU Berlin and the Authors
+#
+# Authors: Jan-Hendrik Prinz
+# Contributors:
+#
+# `adaptiveMD` is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as
+# published by the Free Software Foundation, either version 2.1
+# of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with MDTraj. If not, see <http://www.gnu.org/licenses/>.
+##############################################################################
+
+# part of the code below was taken from `openpathsampling` see
+# <http://www.openpathsampling.org> or
+# <http://github.com/openpathsampling/openpathsampling
+# for details and license
+
+
 import logging
 from uuid import UUID
 from weakref import WeakValueDictionary
@@ -8,49 +36,6 @@ from cache import MaxCache, Cache, NoCache, \
 from proxy import LoaderProxy
 
 logger = logging.getLogger(__name__)
-
-
-# class HashedList(dict):
-#     def __init__(self):
-#         super(HashedList, self).__init__()
-#         dict.__init__(self)
-#         self._list = []
-#
-#     def append(self, key):
-#         dict.__setitem__(self, key, len(self))
-#         self._list.append(key)
-#
-#     # noinspection PyCallByClass
-#     def extend(self, t):
-#         l = len(self)
-#         map(lambda x, y: dict.__setitem__(self, x, y), t, range(l, l + len(t)))
-#         self._list.extend(t)
-#
-#     def __setitem__(self, key, value):
-#         dict.__setitem__(self, key, value)
-#         self._list[value] = key
-#
-#     def __getitem__(self, key):
-#         return dict.__getitem__(self, key)
-#
-#     def index(self, key):
-#         return self._list[key]
-#
-#     def mark(self, key):
-#         if key not in self:
-#             dict.__setitem__(self, key, -2)
-#
-#     def unmark(self, key):
-#         if key in self:
-#             dict.__delitem__(self, key)
-#
-#     def clear(self):
-#         dict.clear(self)
-#         self._list = []
-#
-#     @property
-#     def list(self):
-#         return self._list
 
 
 class ObjectStore(StorableMixin):
@@ -66,7 +51,7 @@ class ObjectStore(StorableMixin):
     cache : :py:class:`mongodb.cache.Cache`
         a dictionary that holds references to all stored elements by index
         or string for named objects. This is only used for cached access
-        if caching is not `False`. Must be of type
+        if caching is not False. Must be of type
         :obj:`mongodb.base.StorableMixin` or subclassed.
 
     """
@@ -81,21 +66,6 @@ class ObjectStore(StorableMixin):
     ]
 
     default_store_chunk_size = 256
-
-    # class DictDelegator(object):
-    #     def __init__(self, store, dct):
-    #         self.name = store.name + '_'
-    #         self.dct = dct
-    #
-    #     def __getitem__(self, item):
-    #         return self.dct[self.name + item]
-    #
-    #     def __contains__(self, item):
-    #         return (self.name + item) in self.dct
-    #
-    # def name_delegate(self, dct):
-    #     return ObjectStore.DictDelegator(self, dct)
-
     default_cache = 10000
 
     def __init__(self, name, content_class):
@@ -104,36 +74,10 @@ class ObjectStore(StorableMixin):
         Parameters
         ----------
         name : str
+            the name of the store
         content_class : class
-
-        Notes
-        -----
-        Usually you want caching, but limited. Recommended is to use an LRUCache
-        with a reasonable maximum number of objects that depends on the typical
-        number of objects to cache and their size
-
-        The class that takes care of storing data in a file is called a
-        `Storage`, so the netCDF+ subclassed `Storage` is a storage.
-        The classes that know how to load and save an object from the storage
-        are called `Store`, like ObjectStore, SampleStore, etc...
-
-        The difference between `json` and `jsonobj` is subtle. Consider
-        storing a complex object. Then there are two ways to do that.
-        1. `json`: Store a reference to the object (provided) it is stored and
-        2. `jsonobj`: serialize the object and only use references for contained
-        objects. All inner objects will always be stored using references.
-        The only exception is using nestable. Consider objects that contain
-        references to objects of the same type, like e.g. operations in an
-        equation (2*3 + 3). Each operation represents a value but each
-        operation needs values to operate on. To save such an object you have
-        again two options:
-        1. `nestable=False`. Store all single objects and always reference
-        the contained objects. For an equation that would mean to store several
-        objects `op1 = plus(op2, 3), op2 = times(2, 3)`. Since this is correct
-        though not intuitive you can also use
-        2. `nestable=True`. Store all the serialized objects nested into one
-        object (string). For our example this corresponds to
-        `plus(times(2,3), 3)`.
+            the base class of the content, must be subclassed from
+            `StorableMixin`
 
         """
 
@@ -184,7 +128,7 @@ class ObjectStore(StorableMixin):
         Returns
         -------
         bool
-            returns `True` if an update was performed
+            returns True if an update was performed
 
         """
         if len(self) > len(self.index):
@@ -298,8 +242,8 @@ class ObjectStore(StorableMixin):
 
         Returns
         -------
-        int or `None`
-            The integer index of the given object or `None` if it is not
+        int or None
+            The integer index of the given object or None if it is not
             stored yet
         """
         return self.index[obj.__uuid__]
@@ -397,15 +341,30 @@ class ObjectStore(StorableMixin):
 
         return None
 
-    def consume_one(self, func=None):
+    def consume_one(self, test_fnc=None):
+        """
+        Remove one object and return it in the process
+
+        Parameters
+        ----------
+        test_fnc : function
+            only objects that match by this function are considered
+
+        Returns
+        -------
+        None or `StorableMixin`
+            if None then no object was altered, otherwise the changed object
+            is returned
+
+        """
         consumed = None
         while consumed is None and len(self) > 0:
-            if func is None:
+            if test_fnc is None:
                 one = self.one
             else:
 
                 try:
-                    one = next(t for t in self if func(t))
+                    one = next(t for t in self if test_fnc(t))
                 except StopIteration:
                     break
 
@@ -427,6 +386,25 @@ class ObjectStore(StorableMixin):
         return consumed
 
     def modify_one(self, key, value, update):
+        """
+        Change an attribute of one object
+
+        Parameters
+        ----------
+        key : str
+            the attributes name to be changed
+        value : object
+            the old value to be found and changed
+        update : object
+            the new value to the changed into
+
+        Returns
+        -------
+        None or `StorableMixin`
+            if None then no object was altered, otherwise the changed object
+            is returned
+
+        """
         modified = None
         while modified is None and len(self) > 0:
 
@@ -449,11 +427,33 @@ class ObjectStore(StorableMixin):
         return modified
 
     def modify_test_one(self, test_fnc, key, value, update):
+        """
+        Change an attribute of one object that matches a function
+
+        Parameters
+        ----------
+        test_fnc : function
+            only objects that match by this function are considered
+        key : str
+            the attributes name to be changed
+        value : object
+            the old value to be found and changed
+        update : object
+            the new value to the changed into
+
+        Returns
+        -------
+        None or `StorableMixin`
+            if None then no object was altered, otherwise the changed object
+            is returned
+
+        """
         modified = None
         while modified is None and len(self) > 0:
             try:
                 found_ones = self._document.find({key: value})
-                one = next(t for t in (self.load(int(UUID(f['_id']))) for f in found_ones) if test_fnc(t))
+                one = next(t for t in (
+                    self.load(int(UUID(f['_id']))) for f in found_ones) if test_fnc(t))
 
             except StopIteration:
                 break
@@ -618,7 +618,6 @@ class ObjectStore(StorableMixin):
         :py:class:`mongodb.base.StorableMixin`
             the loaded object
         """
-
 
         if type(idx) is str:
             idx = int(UUID(self._document.find_one({'name': idx})['_id']))

@@ -19,7 +19,7 @@ This framework aim to automate this process with the following goals:
 
 There are a few things we need to install to make this work.
 
-### 1. MongoDB
+### MongoDB
 
 AdaptiveMD and RP both need access to a MongoDB. The FU has one that Allegro can access in place and you can use this for storing projects. If you want to store these locally you need to install MongoDB.
 
@@ -74,7 +74,7 @@ conda install ujson pyyaml pymongo=2.8 numpy
 conda install pyemma openmm mdtraj
 ```
 
-### 3. Install _adaptivemd_
+### Install _adaptiveMD_
 
 Let's get adaptivemd from the github repo now.
 
@@ -101,9 +101,17 @@ All of this must also be installed on the cluster, where you want to run your si
 
 For allegro I suggest to use a miniconda installation. Note that you only need these packages if you want to use some of it on the cluster like run openmm or make computations using pyemma. Just for running, say `acemd` conda is not required!
 
-
-#### Finally
-
 That's it. Have fun running adaptive simulations.
+
+#### Documentation
+
+To compile the doc pages, clone this github repository, go into the `docs` folder and do
+
+```bash 
+conda install sphinx
+make html
+```
+
+Build finished. The HTML pages are in _build/html.
 
 You might want to start with the examples in `examples/tutorials`

@@ -1,3 +1,31 @@
+##############################################################################
+# adaptiveMD: A Python Framework to Run Adaptive Molecular Dynamics (MD)
+#             Simulations on HPC Resources
+# Copyright 2017 FU Berlin and the Authors
+#
+# Authors: Jan-Hendrik Prinz
+# Contributors:
+#
+# `adaptiveMD` is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as
+# published by the Free Software Foundation, either version 2.1
+# of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with MDTraj. If not, see <http://www.gnu.org/licenses/>.
+##############################################################################
+
+# part of the code below was taken from `openpathsampling` see
+# <http://www.openpathsampling.org> or
+# <http://github.com/openpathsampling/openpathsampling
+# for details and license
+
+
 from collections import OrderedDict
 import weakref
 
@@ -50,14 +78,14 @@ class Cache(object):
 
         Parameters
         ----------
-        item : `object`
+        item : object
             key to select element in cache
-        default : `object`
+        default : object
             return value if item is not present in cache
 
         Returns
         -------
-        `object` or `None`
+        object or None
             cached value at key item if present, returns default otherwise
         """
         try:
@@ -296,8 +324,8 @@ class WeakLRUCache(Cache):
 
         Returns
         -------
-        `object` or `None`
-            the requested object if it exists else `None`
+        object or None
+            the requested object if it exists else None
         """
         if item is None:
             return None

@@ -1,25 +1,46 @@
+##############################################################################
+# adaptiveMD: A Python Framework to Run Adaptive Molecular Dynamics (MD)
+#             Simulations on HPC Resources
+# Copyright 2017 FU Berlin and the Authors
+#
+# Authors: Jan-Hendrik Prinz
+# Contributors:
+#
+# `adaptiveMD` is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as
+# published by the Free Software Foundation, either version 2.1
+# of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with MDTraj. If not, see <http://www.gnu.org/licenses/>.
+##############################################################################
+
+
 from adaptivemd.task import Task
 from adaptivemd.file import Location, File
 from adaptivemd.engine import Engine, Frame, Trajectory
 
 
 class ACEMDEngine(Engine):
-    """
-    Implementation of the AceMD engine
-
-    Attributes
-    ----------
-    conf_file : `File`
-        reference to the .conf file
-    pdb_file : `File`
-        reference to a .pdb file
-    args : str
-        arguments passed to the AceMD command line
-
-    """
-    trajectory_ext = 'xtc'
-
     def __init__(self, conf_file, pdb_file, args=None):
+        """
+        Implementation of the AceMD engine
+
+        Parameters
+        ----------
+        conf_file : `File`
+            reference to the .conf file
+        pdb_file : `File`
+            reference to a .pdb file
+        args : str
+            arguments passed to the AceMD command line
+
+        """
         super(ACEMDEngine, self).__init__()
 
         self._items = dict()
@@ -41,40 +62,5 @@ class ACEMDEngine(Engine):
     def call_format_str(self):
         return 'acemd %s {0}' % self.args
 
-    def task_run_trajectory(self, target):
-        t = Task()
-
-        initial_pdb = t.link(self['pdb_file_stage'], Location('initial.pdb'))
-        t.get(self['conf_file_stage'])
-
-        if target in [self['pdb_file'], self['pdb_file_stage']]:
-            input_pdb = initial_pdb
-
-        elif isinstance(target.frame, File):
-            input_pdb = t.get(target.frame, Location('input.pdb'))
-
-        elif isinstance(target.frame, Frame):
-            input_traj = t.link(target.frame.trajectory, Location('input.xtc'))
-            input_pdb = File('input.pdb')
-
-            t.pre_bash('mdconvert -o %s -i %d -t %s %s' % (
-                input_pdb, target.frame.index, initial_pdb, input_traj))
-        else:
-            # todo: Raise execption here
-            return
-
-        t.pre_bash('echo "structure %s\nrun %f" >> %s' % (
-            input_pdb, target.length, self['conf_file_stage']))
-
-        output_traj = Trajectory(
-            'output.xtc', target.frame, length=target.length)
-
-        t.call(
-            self.call_format_str,
-            input_pdb, target.length, output_traj)
-
-        t.put(output_traj, target)
-
-        return t
-
-
+    def run(self, target):
+        return None

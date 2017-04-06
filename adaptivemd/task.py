@@ -1,42 +1,42 @@
-import os
-import uuid
+##############################################################################
+# adaptiveMD: A Python Framework to Run Adaptive Molecular Dynamics (MD)
+#             Simulations on HPC Resources
+# Copyright 2017 FU Berlin and the Authors
+#
+# Authors: Jan-Hendrik Prinz
+# Contributors:
+#
+# `adaptiveMD` is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as
+# published by the Free Software Foundation, either version 2.1
+# of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with MDTraj. If not, see <http://www.gnu.org/licenses/>.
+##############################################################################
 
-from file import File
+
+import os
+
+from file import File, JSONFile, FileTransaction
 from util import get_function_source
 from mongodb import StorableMixin, SyncVariable, ObjectSyncVariable
 
 
 class BaseTask(StorableMixin):
-    """
-    Enhanced version of the ComputeUnitDescription
-
-    This mainly makes it easier to create a CU for RP. Similar to the
-    purpose of RP kernels.
-
-    """
-
     _copy_attributes = [
-        '_task_pre_stage', '_task_post_stage',
-        '_pre_stage', '_pre_stage', '_post_stage',
-        '_task_post_exec', '_task_pre_exec',
-        '_user_pre_exec', '_user_post_exec',
-        '_add_paths', '_environment'
+        '_main', '_add_paths', '_environment'
         ]
 
     def __init__(self):
         super(BaseTask, self).__init__()
 
-        self._task_pre_stage = []
-        self._task_post_stage = []
-
-        self._pre_stage = []
-        self._post_stage = []
-
-        self._task_post_exec = []
-        self._task_pre_exec = []
-
-        self._user_pre_exec = []
-        self._user_post_exec = []
+        self._main = []
 
         self._add_paths = []
         self._environment = {}
@@ -56,52 +56,101 @@ class BaseTask(StorableMixin):
 
     @property
     def pre_add_paths(self):
+        """
+        list of str
+            the list of added paths to the $PATH variable by this task
+
+        """
         return self._add_paths
 
     @property
     def environment(self):
+        """
+        dict str : str
+            the dict of environment variables and their assigned value
+
+        """
         return self._environment
 
     @property
-    def pre_exec_tail(self):
-        return (
-            self._task_pre_stage +
-            self._task_pre_exec +
-            self._pre_stage +
-            self._user_pre_exec)
-
-    @property
     def pre_exec(self):
+        """
+        list of str or `Action`
+            the list of actions to be run before the main script. Contains environment variables
+
+        """
         return (
             self._format_export_paths(self.pre_add_paths) +
-            self._format_environment(self.environment) +
-            self.pre_exec_tail)
+            self._format_environment(self.environment))
 
     @property
-    def post_exec(self):
+    def main(self):
+        """
+        list of str or `Action`
+            the main part of the script
+
+        """
         return (
-            self._user_post_exec + self._post_stage +
-            self._task_pre_exec + self._task_post_stage)
+            self._main
+        )
 
     @property
-    def input_staging(self):
-        return self._task_pre_stage + self._pre_stage
+    def script(self):
+        """
+        list of str or `Action`
+            the full script of this task. This is what is send to a worker and parsed by it
 
-    @property
-    def output_staging(self):
-        return self._post_stage + self._task_post_stage
+        """
+        return self.pre_exec + self.main
 
     def add_path(self, path):
+        """
+
+        Parameters
+        ----------
+        path : (list of) str
+            a (list of) path(s) to be added to the $PATH variable before task execution
+
+        """
         if isinstance(path, str):
             self._add_paths.append(path)
         elif isinstance(path, (list, tuple)):
             self._add_paths.extend(path)
 
     def __rshift__(self, other):
+        """
+        The `>>` can be used to wrap a task in one another.
+
+        The outer task must have pre and post and the inner will use the full script
+
+        Parameters
+        ----------
+        other : `PrePostTask`
+            the task that wraps the current task
+
+        Returns
+        -------
+        `EnclosedTask`
+            the representation of a wrapped task
+
+        """
         if other is None:
             return self
-        elif isinstance(other, Task):
+        elif isinstance(other, PrePostTask):
             return EnclosedTask(self, other)
+
+    def to_dict(self):
+        dct = {c: getattr(self, c) for c in self._copy_attributes}
+        return dct
+
+    @classmethod
+    def from_dict(cls, dct):
+        task = cls()
+
+        for c in cls._copy_attributes:
+            setattr(task, c, dct.get(c))
+
+        return task
 
 
 class Task(BaseTask):
@@ -110,15 +159,30 @@ class Task(BaseTask):
 
     Attributes
     ----------
-    worker : `WorkingScheduler`
+    worker : :class:`~adaptivemd.worker.WorkingScheduler`
+        the currently assigned Worker instance (not the scheduler!)
+    generator : :class:`~adaptivemd.generator.TaskGenerator`
+        if given the :class:`~adaptivemd.generator.TaskGenerator` that
+        was used to create this task
+    state : str
+        a string representing the current state of the execution. One of
+        - 'create' : task has been created and is available for execution
+        - 'running': task is currently executed by a scheduler
+        - 'queued' : task has been captured by a worker for execution
+        - 'fail' : task has completed but failed. You can restart it
+        - 'succedd` : task has completed and succeeded.
+        - 'halt' : task has been halted by user. You can restart it
+        - 'cancelled' : task has been cancelled by user. You CANNOT restart it
+    stdout : :class:`~adaptivemd.logentry.LogEntry`
+        After completion you can access the stdout of the task here
+    stderr : :class:`~adaptivemd.logentry.LogEntry`
+        After completion you can access the stderr of the task here
 
     """
     _events = ['submit', 'fail', 'success', 'change']
 
     _copy_attributes = BaseTask._copy_attributes + [
-        'executable', 'arguments',
-        'cores', 'mpi', 'stdout',
-        'stderr', 'kernel', 'name', 'restartable', 'cleanup',
+        'stdout', 'stderr', 'restartable', 'cleanup',
         'generator', 'dependencies', 'state', 'worker'
         ]
 
@@ -141,17 +205,8 @@ class Task(BaseTask):
         self._on = {}
         self._add_files = []
 
-        self.executable = None
-        self.arguments = None
-
-        self.cores = 1
-        self.mpi = False
-
         self.stdout = None
         self.stderr = None
-
-        self.kernel = None
-        self.name = None
 
         self.restartable = None
         self.cleanup = None
@@ -196,6 +251,14 @@ class Task(BaseTask):
 
     @property
     def dependency_okay(self):
+        """
+        Check if all dependency tasks are successful
+
+        Returns
+        -------
+        bool
+            True if all dependencies are fulfilled
+        """
         dependencies = self.dependencies
         if dependencies is not None:
             return all(d.state == 'success' for d in self.dependencies)
@@ -204,25 +267,35 @@ class Task(BaseTask):
 
     @property
     def ready(self):
+        """
+        Check if this task is ready to be executed
+
+        Usually this only checks dependencies but might involve more elaborate checks
+        for specific Task classes
+
+        Returns
+        -------
+        bool
+            if True the task can now be executed
+
+        """
         if self.dependencies:
             return self.dependency_okay
 
         return True
 
-    def add_conda_env(self, name):
+    def _default_fail(self, scheduler):
         """
-        Add loading a conda env to all tasks of this resource
+        the default function executed when a task fails
 
-        This calls `resource.wrapper.pre_bash('source activate {name}')`
+        You can add your own callbacks. This is just the default
+
         Parameters
         ----------
-        name : str
-            name of the conda environment
+        scheduler : `Scheduler`
+            the calling scheduler to know where the task has failed
 
         """
-        self.pre_bash('source activate %s' % name)
-
-    def _default_fail(self, scheduler):
         # todo: improve error handling
         print 'task did not complete'
 
@@ -237,85 +310,161 @@ class Task(BaseTask):
                          unit.stdout,
                          unit.stderr)
 
-        if self.restartable and self.restart_failed:
-            scheduler.submit(self)
-
     def _default_success(self, scheduler):
-            print 'task succeeded. State:', self.state
+        """
+        the default function executed when a task succeeds
 
-            for f in self.modified_files:
-                f.modified()
-                scheduler.project.files.add(f)
+        You can add your own callbacks. This is just the default
 
-            for f in self.targets:
-                f.create(scheduler)
-                scheduler.project.files.add(f)
+        Parameters
+        ----------
+        scheduler : `Scheduler`
+            the calling scheduler to know where the task has succeeded
+
+        """
+
+        for f in self.modified_files:
+            f.modified()
+            scheduler.project.files.add(f)
+
+        for f in self.targets:
+            f.create(scheduler)
+            scheduler.project.files.add(f)
 
     @property
     def description(self):
+        """
+        Return a lengthy description of the task for debugging and information
+
+        Returns
+        -------
+        str
+            the information text
+        """
         task = self
-        s = ['Task: %s [%s]' % (
-                task.generator.__class__.__name__ or task.__class__.__name__, task.state)]
+        s = ['Task: %s(%s) [%s]' % (
+                task.__class__.__name__, task.generator.__class__.__name__, task.state)]
 
         if task.worker:
             s += ['Worker: %s:%s' % (task.worker.hostname, task.worker.cwd)]
             s += ['        cd worker.%s' % hex(task.__uuid__)]
 
         s += ['']
-        s += ['Required : %s' % [x.short for x in task.unstaged_input_files]]
-        s += ['Output : %s' % [x.short for x in task.targets]]
-        s += ['Modified : %s' % [x.short for x in task.modified_files]]
+        s += ['Sources']
+        s += ['- %s %s' % (x.short, '[exists]' if x.exists else '')
+              for x in task.unstaged_input_files]
+        s += ['Targets']
+        s += ['- %s' % x.short for x in task.targets]
+        s += ['Modified']
+        s += ['- %s' % x.short for x in task.modified_files]
 
         s += ['']
         s += ['<pretask>']
-        s += map(str, task.pre_exec + [task.command] + task.post_exec)
+        s += map(str, task.script)
         s += ['<posttask>']
 
         return '\n'.join(s)
 
-    def fire(self, event, cluster):
+    def fire(self, event, scheduler):
+        """
+        Fire an event like success or failed.
+
+        Notes
+        -----
+        You should never have to call this yourself. The scheduler does that.
+
+        Parameters
+        ----------
+        event : str
+            the events name like `fail`, `success`, `submit`
+        scheduler : `Scheduler`
+            the scheduler that issued the events to be fired
+
+        """
         if event in Task._events:
             cbs = self._on.get(event, [])
             for cb in cbs:
-                cb(self, cluster)
+                cb(self, scheduler)
 
         if event in ['submit', 'fail', 'success']:
             self.state = event
 
     def is_done(self):
+        """
+        Check if the task is done executing. Can be failed, successful or cancelled
+
+        Returns
+        -------
+        bool
+            True if the task has finished its execution
+
+        """
         return self.state in ['fail', 'success', 'cancelled']
 
     def was_successful(self):
+        """
+        Check if the task is done executing and was successful
+
+        Returns
+        -------
+        bool
+            True if the task has finished successfully
+
+        """
         return self.state in ['success']
 
     def has_failed(self):
+        """
+        Check if the task is done executing and has failed
+
+        Returns
+        -------
+        bool
+            True if the task has finished but failed
+
+        """
         return self.state in ['fail']
 
     def add_cb(self, event, cb):
+        """
+        Add a custom callback
+
+        Parameters
+        ----------
+        event : str
+            name of the event to be called upon firing
+        cb : function
+            the function to be called. It must be a function that takes a task and a scheduler
+
+        """
         if event in Task._events:
             self._on[event] = self._on.get(event, [])
             self._on[event].append(cb)
 
     @property
     def additional_files(self):
+        """
+        list of `Location`
+            return the list of files created other than taken care of by actions. Should usually not
+            be necessary. If you do some bad hacks with the bash you can add files that
+            you transferred yourself to the project folders.
+
+        """
         return self._add_files
 
-    @property
-    def command(self):
-        cmd = self.executable or ''
-
-        if isinstance(self.arguments, basestring):
-            cmd += ' ' + self.arguments
-        elif self.arguments is not None:
-            cmd += ' '
-            args = [
-                a if (a[0] in ['"', "'"] and a[0] == a[-1]) else '"' + a + '"'
-                for a in self.arguments]
-            cmd += ' '.join(args)
-
-        return cmd
-
     def add_files(self, files):
+        """
+        Add additional files to the task execution
+
+        Should usually not be necessary. If you do some bad hacks with the bash you
+        can add files that you transferred yourself to the project folders.
+
+        Parameters
+        ----------
+        files : list of `File`
+            the list of files to be added to the task
+
+        """
         if isinstance(files, File):
             self._add_files.append(files)
         elif isinstance(files, (list, tuple)):
@@ -331,9 +480,12 @@ class Task(BaseTask):
         set of `File`
             the list of files that are created or overwritten by this task
         """
-        return set(
-            sum(filter(bool, [t.added for t in self._post_stage]), [])
-            + self._add_files)
+
+        transactions = [t for t in self.script if isinstance(t, FileTransaction)]
+
+        return filter(
+            lambda x: not x.is_temp,
+            set(sum(filter(bool, [f.added for f in transactions]), []) + self._add_files))
 
     @property
     def target_locations(self):
@@ -357,7 +509,11 @@ class Task(BaseTask):
         set of `File`
             the list of files that are required by this task
         """
-        return set(sum(filter(bool, [t.required for t in self._pre_stage]), []))
+        transactions = [t for t in self.script if isinstance(t, FileTransaction)]
+
+        return filter(
+            lambda x: not x.is_temp,
+            set(sum(filter(bool, [t.required for t in transactions]), []) + self._add_files))
 
     @property
     def source_locations(self):
@@ -461,41 +617,25 @@ class Task(BaseTask):
             raise ValueError(
                 'Cannot set same env variable `%s` more than once.' % key)
 
-    def pre_bash(self, script):
+    def append(self, cmd):
         """
-        Fills pre_exec
+        Append a command to this task
 
         Returns
         -------
 
         """
-        if isinstance(script, (list, tuple)):
-            script = sum(map(lambda x: x.split('\n'), script), [])
-        elif isinstance(script, str):
-            script = script.split('\n')
+        self._main.append(cmd)
 
-        self._user_pre_exec.extend(script)
-
-    def post_bash(self, script):
+    def prepend(self, cmd):
         """
-        Fill post_exec
+        Append a command to this task
 
         Returns
         -------
 
         """
-        if isinstance(script, (list, tuple)):
-            script = sum(map(lambda x: x.split('\n'), script), [])
-        elif isinstance(script, str):
-            script = script.split('\n')
-
-        self._user_pre_exec.extend(script)
-
-    def pre_stage(self, transaction):
-        self._pre_stage.append(transaction)
-
-    def post_stage(self, transaction):
-        self._post_stage.append(transaction)
+        self._main.insert(0, cmd)
 
     def get(self, f, name=None):
         """
@@ -526,12 +666,45 @@ class Task(BaseTask):
                 'Weird file location `%s` not sure how to get it.' %
                 f.location)
 
-        self.pre_stage(transaction)
+        self.append(transaction)
+
+        assert isinstance(transaction, FileTransaction)
         return transaction.target
 
+    def touch(self, f):
+        """
+        Add an action to create an empty file or folder at a given location
+
+        Parameters
+        ----------
+        f : `Location`
+            the location (file or folder) to be used
+
+        """
+        transaction = f.touch()
+        self.append(transaction)
+        return transaction.source
+
     def link(self, f, name=None):
+        """
+        Add an action to create a link to a file (under a new name)
+
+        Parameters
+        ----------
+        f : `Location`
+            the source location (file or folder) to be used
+        name : `Location` or str
+            the target location to be used. For source files and target folders the
+            basename is copied
+
+        Returns
+        -------
+        `Location`
+            the actual target location
+
+        """
         transaction = f.link(name)
-        self.pre_stage(transaction)
+        self.append(transaction)
         return transaction.target
 
     def put(self, f, target):
@@ -548,63 +721,170 @@ class Task(BaseTask):
             the target location. Need to contain a URL like `staging://` or
             `file://` for application side files
 
+        Returns
+        -------
+        `Location`
+            the actual target location
+
         """
         transaction = f.move(target)
-        self.post_stage(transaction)
+        self.append(transaction)
         return transaction.target
 
     def remove(self, f):
         """
-        Remove a file at the end of the run
+        Add an action to remove a file or folder
 
         Parameters
         ----------
         f : `File`
+            the location to be removed
+
+        Returns
+        -------
+        `Location`
+            the actual location
 
         """
         transaction = f.remove()
-        self.post_stage(transaction)
+        self.append(transaction)
         return transaction.source
+
+    def add_conda_env(self, name):
+        """
+        Add loading a conda env to all tasks of this resource
+
+        This calls `resource.wrapper.append('source activate {name}')`
+        Parameters
+        ----------
+        name : str
+            name of the conda environment
+
+        """
+        self.append('source activate %s' % name)
+
+
+class PrePostTask(Task):
+    """
+    Special task where the script is devided into Pre/Main/Post
+
+    Attributes
+    ----------
+    pre : list
+        the pre part of the script. Attach actions with `.append`
+    post : list
+        the post part of the script. Attach actions with `.append`
+
+    """
+
+    _copy_attributes = Task._copy_attributes + [
+        'pre', 'post'
+    ]
+
+    def __init__(self, generator=None):
+        super(PrePostTask, self).__init__(generator)
+        self.pre = []
+        self.post = []
+
+    @property
+    def pre_exec(self):
+        return (
+            self._format_export_paths(self.pre_add_paths) +
+            self._format_environment(self.environment))
+
+    @property
+    def main(self):
+        return self.pre + self._main + self.post
+
+
+class MPITask(PrePostTask):
+    """
+    A description for a task running on an HPC with MPI (used for RP)
+
+    """
+
+    _copy_attributes = PrePostTask._copy_attributes + [
+        'executable', 'arguments',
+        'cores', 'mpi', 'kernel', 'name'
+    ]
+
+    def __init__(self, generator=None):
+        super(MPITask, self).__init__(generator)
+
+        self.executable = None
+        self.arguments = None
+
+        self.cores = 1
+        self.mpi = False
+
+        self.kernel = None
+        self.name = None
+
+    @property
+    def command(self):
+        cmd = self.executable or ''
+
+        if isinstance(self.arguments, basestring):
+            cmd += ' ' + self.arguments
+        elif self.arguments is not None:
+            cmd += ' '
+            args = [
+                a if (a[0] in ['"', "'"] and a[0] == a[-1]) else '"' + a + '"'
+                for a in self.arguments]
+            cmd += ' '.join(args)
+
+        return cmd
 
     def call(self, command, *args, **kwargs):
         parts = command.split(' ')
         parts = [part.format(*args, **kwargs) for part in parts]
         self.executable = parts[0]
         self.arguments = parts[1:]
+        
+    @property
+    def main(self):
+        return self.pre + [self.command] + self.post
+    
+    def append(self, cmd):
+        raise RuntimeWarning(
+            'append does nothing for MPITasks. Use .pre.append or .post.append')
 
-    def to_dict(self):
-        dct = {c: getattr(self, c) for c in self._copy_attributes}
-
-        return dct
-
-    @classmethod
-    def from_dict(cls, dct):
-        task = cls()
-
-        for c in cls._copy_attributes:
-            setattr(task, c, dct.get(c))
-
-        return task
+    def prepend(self, cmd):
+        raise RuntimeWarning(
+            'prepend does nothing for MPITasks. Use .pre.prepend or .post.prepend')
 
 
-class DummyTask(Task):
+class DummyTask(PrePostTask):
     """
-    A Task not to be executed
+    A Task not to be executed. Only to be wrapped around other tasks
     """
 
     def __init__(self):
         super(DummyTask, self).__init__()
         self.state = 'dummy'
 
+    @property
+    def description(self):
+        task = self
+        s = ['Task: %s' % task.__class__.__name__]
+
+        s += ['<pre>']
+        s += map(str, task.pre_exec + task.pre)
+        s += ['</pre>']
+        s += ['<main />']
+        s += ['<post>']
+        s += map(str, task.post)
+        s += ['</post>']
+
+        return '\n'.join(s)
+
 
 class EnclosedTask(Task):
     """
-    Wrap a task with additional staging, etc
+    Helper class to wrap any task with a PrePostTask
     """
     _copies = [
-        'executable', 'arguments',
-        'environment', 'cores', 'mpi', 'stdout',
-        'stderr', 'kernel', 'name', 'restartable', 'cleanup']
+        'environment', 'stdout', 'stderr', 'restartable', 'cleanup']
 
     def __init__(self, task, wrapper):
         super(Task, self).__init__()
@@ -626,47 +906,48 @@ class EnclosedTask(Task):
     @property
     def environment(self):
         env = {}
+
         if self._wrapper.environment:
             env.update(self._wrapper.environment)
+
         if self._task.environment:
             env.update(self._task.environment)
+
         return env
+
+    @property
+    def pre_add_paths(self):
+        return self._wrapper.pre_add_paths + self._task.pre_add_paths
 
     @classmethod
     def from_dict(cls, dct):
         return cls(dct['task'], dct['wrapper'])
 
     @property
-    def input_staging(self):
-        return self._wrapper.input_staging + self._task.input_staging
-
-    @property
-    def output_staging(self):
-        return self._task.output_staging + self._wrapper.output_staging
-
-    @property
-    def pre_add_paths(self):
-        return self._wrapper.pre_add_paths + self._task.pre_add_paths
-
-    @property
-    def pre_exec_tail(self):
-        return self._wrapper.pre_exec_tail + self._task.pre_exec_tail
-
-    @property
-    def post_exec(self):
-        return self._wrapper.post_exec + self._task.post_exec
+    def main(self):
+        return self._wrapper.pre + self._task.main + self._wrapper.post
 
 
-class PythonTask(Task):
+class PythonTask(PrePostTask):
     """
-    A special task that does a RPC python call
+    A special task that does a RPC python calls
+
+    Attributes
+    ----------
+    then_func_name : str or None
+        the name of the function of the `TaskGenerator` to be called with
+        the resulting output
+    store_output : bool
+        if True then the result from the RPC called function will also be
+        stored in the database. It can later be retrieved using the `.output`
+        attribute on the task completed successfully
     """
 
-    _copy_attributes = Task._copy_attributes + [
+    _copy_attributes = PrePostTask._copy_attributes + [
         '_python_import', '_python_source_files', '_python_function_name',
-        '_python_args', '_python_kwargs', '_param_uid',
+        '_python_args', '_python_kwargs',
         '_rpc_input_file', '_rpc_output_file',
-        'then_func_name']
+        'then_func_name', 'store_output']
 
     then_func = None
 
@@ -679,52 +960,82 @@ class PythonTask(Task):
         self._python_args = None
         self._python_kwargs = None
 
-        self.executable = 'python'
-        self.arguments = '_run_.py'
-
-        self._json = None
-        self._param_uid = str(uuid.uuid4())
+        # self.executable = 'python'
+        # self.arguments = '_run_.py'
 
         self.then_func_name = 'then_func'
 
         self._rpc_input_file = \
-            File('file://_rpc_input_%s.json' % self._param_uid)
+            JSONFile('file://_rpc_input_%s.json' % hex(self.__uuid__))
         self._rpc_output_file = \
-            File('file://_rpc_output_%s.json' % self._param_uid)
+            JSONFile('file://_rpc_output_%s.json' % hex(self.__uuid__))
 
-        self._task_pre_stage.append(
-            self._rpc_input_file.transfer('input.json'))
-        self._task_post_stage.append(
-            File('output.json').transfer(self._rpc_output_file))
+        # input args -> input.json
+        self.pre.append(self._rpc_input_file.transfer('input.json'))
+
+        # output args -> output.json
+        self.post.append(File('output.json').transfer(self._rpc_output_file))
 
         f = File('staging:///_run_.py')
-        self._task_pre_stage.append(f.link())
+        self.pre.append(f.link())
 
         self.add_cb('success', self.__class__._cb_success)
         self.add_cb('submit', self.__class__._cb_submit)
 
+        # if True the RPC result will be stored in the DB with the task
+        self.store_output = True
+
+    def backup_output_json(self, target):
+        """
+        Add an action that will copy the resulting JSON file to the given path
+
+        Parameters
+        ----------
+        target : `Location`
+            the place to copy the resulting `output.json` file to
+
+        """
+        self.post.append(File('output.json').copy(target))
+
     def _cb_success(self, scheduler):
         # here is the logic to retrieve the result object
-        filename = scheduler.replace_prefix(self._rpc_output_file.url)
+        # the output file is a JSON and these know how to load itself
 
-        with open(filename, 'r') as f:
-            data = scheduler.simplifier.from_json(f.read())
+        if self.store_output:
+            # by default store the result. If you handle it yourself you
+            # might want to turn it off to not save the data twice
+            self._rpc_output_file.load(scheduler)
+
+        filename = scheduler.get_path(self._rpc_output_file)
+        data = self._rpc_output_file.get(scheduler)
 
         if self.generator is not None and hasattr(self.generator, self.then_func_name):
             getattr(self.generator, self.then_func_name)(
-                scheduler.project,
-                data, {
-                    'args': self._python_args,
-                    'kwargs': self._python_kwargs})
+                scheduler.project, self, data, self._python_kwargs)
 
-        # remove the RPC file.
+        # cleanup
+        # mark as changed / deleted
         os.remove(filename)
-        os.remove(scheduler.replace_prefix(self._rpc_input_file.url))
+        self._rpc_output_file.modified()
+        os.remove(scheduler.get_path(self._rpc_input_file))
+        self._rpc_input_file.modified()
 
     def _cb_submit(self, scheduler):
         filename = scheduler.replace_prefix(self._rpc_input_file.url)
         with open(filename, 'w') as f:
             f.write(scheduler.simplifier.to_json(self._get_json(scheduler)))
+
+    @property
+    def output(self):
+        """
+        Return the data contained in the output file
+
+        Returns
+        -------
+        object
+
+        """
+        return self._rpc_output_file.data
 
     def then(self, func_name):
         """
@@ -738,7 +1049,7 @@ class PythonTask(Task):
         """
         self.then_func_name = func_name
 
-    def call(self, command, *args, **kwargs):
+    def call(self, command, **kwargs):
         """
         Set the python function to be called with its arguments
 
@@ -749,26 +1060,26 @@ class PythonTask(Task):
             package then the package needs to be installed on the cluster to be
             called. A function defined in a local file can be called as long
             as dependencies are installed.
-        args : arguments to the function
-        kwargs : named arguments to the function
+        kwargs : ``**kwargs``
+            named arguments to the function
 
         """
-        self._python_function_name = '.'.join(
-            [command.__module__, command.func_name])
-        self._python_args = args
+        self._python_function_name = '.'.join([command.__module__, command.func_name])
         self._python_kwargs = kwargs
 
         self._python_import, self._python_source_files = \
             get_function_source(command)
 
         for f in self._python_source_files:
-            self._task_pre_stage.append(File('file://' + f).transfer())
+            self.pre.append(File('file://' + f).load().transfer())
+
+        # call the helper script to execute the function call
+        self.append('python _run_.py')
 
     def _get_json(self, scheduler):
         dct = {
             'import': self._python_import,
             'function': self._python_function_name,
-            'args': self._python_args,
             'kwargs': self._python_kwargs
         }
         return scheduler.flatten_location(dct)

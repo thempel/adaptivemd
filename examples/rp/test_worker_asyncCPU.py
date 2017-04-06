@@ -22,9 +22,9 @@ os.environ['RADICAL_PILOT_DBURL'] = path_to_db
 
 # import adaptive components
 
-from adaptivemd import Project
+from adaptivemd import Project, ExecutionPlan
 from adaptivemd import LocalJHP
-from adaptivemd import FunctionalEvent
+from adaptivemd import ExecutionPlan
 
 from adaptivemd import OpenMMEngine
 from adaptivemd import PyEMMAAnalysis
@@ -76,31 +76,31 @@ if __name__ == '__main__':
 
     # create 4 trajectories
     trajectories = project.new_trajectory(pdb_file, 100, 4)
-    tasks = map(engine.task_run_trajectory, trajectories)
+    tasks = map(engine.run, trajectories)
     map(project.tasks.add, tasks)
 
     # now start adaptive loop
     def strategy_trajectory(loops, num):
         for loop in range(loops):
             trajectories = project.new_ml_trajectory(20, number=num)
-            tasks = map(engine.task_run_trajectory, trajectories)
+            tasks = map(engine.run, trajectories)
             map(project.tasks.add, tasks)
             yield [t.is_done for t in tasks]
 
-    ev1 = FunctionalEvent(strategy_trajectory(100, 10))
+    ev1 = ExecutionPlan(strategy_trajectory(100, 10))
 
     project.add_event(ev1)
 
     def strategy_model(steps):
         while ev1:
             num = len(project.trajectories)
-            task = modeller.task_run_msm_files(list(project.trajectories))
+            task = modeller.execute(list(project.trajectories))
             project.tasks.add(task)
             yield task.is_done
             cond = project.on_ntraj(num + steps)
             yield lambda: cond() or not ev1
 
-    ev2 = FunctionalEvent(strategy_model(100))
+    ev2 = ExecutionPlan(strategy_model(100))
     project.add_event(ev2)
 
     try:

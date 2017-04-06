@@ -21,7 +21,7 @@ import sys
 # import adaptive components
 
 from adaptivemd import Project
-from adaptivemd import LocalCluster AllegroCluster
+from adaptivemd import LocalResource AllegroCluster
 
 from adaptivemd import OpenMMEngine
 from adaptivemd import PyEMMAAnalysis
@@ -85,7 +85,7 @@ if __name__ == '__main__':
     scheduler = project.get_scheduler(cores=1)
 
     trajectory = project.new_trajectory(engine['pdb_file'], 100)
-    task = engine.task_run_trajectory(trajectory)
+    task = engine.run(trajectory)
 
     scheduler(task)
 

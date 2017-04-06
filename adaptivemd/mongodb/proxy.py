@@ -1,7 +1,31 @@
-"""
+##############################################################################
+# adaptiveMD: A Python Framework to Run Adaptive Molecular Dynamics (MD)
+#             Simulations on HPC Resources
+# Copyright 2017 FU Berlin and the Authors
+#
+# Authors: Jan-Hendrik Prinz
+# Contributors:
+#
+# `adaptiveMD` is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as
+# published by the Free Software Foundation, either version 2.1
+# of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with MDTraj. If not, see <http://www.gnu.org/licenses/>.
+##############################################################################
 
-@author: JH Prinz
-"""
+# part of the code below was taken from `openpathsampling` see
+# <http://www.openpathsampling.org> or
+# <http://github.com/openpathsampling/openpathsampling
+# for details and license
+
+
 import functools
 import weakref
 
@@ -37,14 +61,6 @@ class LoaderProxy(object):
 
         self._subject = weakref.ref(ref)
         return ref
-
-    @property
-    def reversed(self):
-        return LoaderProxy(self._store, StorableMixin.ruuid(self._idx))
-
-    @property
-    def _reversed(self):
-        return LoaderProxy(self._store, StorableMixin.ruuid(self._idx))
 
     def __eq__(self, other):
         if self is other:
@@ -84,7 +100,7 @@ class LoaderProxy(object):
         """
         try:
             return self._store[self._idx]
-        except KeyError as e:
+        except KeyError:
             if type(self._idx) is int:
                 raise RuntimeWarning(
                     'Index %s is not in store. This should never happen!' %

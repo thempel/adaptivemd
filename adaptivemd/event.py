@@ -1,7 +1,29 @@
-import types
+##############################################################################
+# adaptiveMD: A Python Framework to Run Adaptive Molecular Dynamics (MD)
+#             Simulations on HPC Resources
+# Copyright 2017 FU Berlin and the Authors
+#
+# Authors: Jan-Hendrik Prinz
+# Contributors:
+#
+# `adaptiveMD` is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as
+# published by the Free Software Foundation, either version 2.1
+# of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with MDTraj. If not, see <http://www.gnu.org/licenses/>.
+##############################################################################
+
+
+from itertools import chain
 
 from condition import Condition
-from itertools import chain
 from task import Task
 
 
@@ -14,6 +36,13 @@ class Event(object):
     _wait_for_completion = True
 
     def __init__(self, when=None):
+        """
+
+        Parameters
+        ----------
+        when : `Condition`
+            the callable that determines when an Event should be executed
+        """
         self._on = None
         self._until = None
 
@@ -61,7 +90,7 @@ class Event(object):
         except StopIteration:
             self._current_when = None
 
-    def _update_task_list(self):
+    def _update_conditions(self):
         self._active_tasks = filter(lambda x: not x.is_done(),
                                     self._active_tasks)
 
@@ -69,17 +98,25 @@ class Event(object):
 
     @property
     def active_tasks(self):
-        self._update_task_list()
+        """
+
+        Returns
+        -------
+        list of `Task`
+            the list of currently active tasks in this event
+
+        """
+        self._update_conditions()
         return self._active_tasks
 
     @property
     def has_running_tasks(self):
-        self._update_task_list()
+        self._update_conditions()
         return len(self._finish_conditions) > 0
         # return len(self._active_tasks) > 0
 
     def __nonzero__(self):
-        self._update_task_list()
+        self._update_conditions()
         return self._current_when is not None or self.has_running_tasks
 
     def _generate(self, scheduler):
@@ -107,7 +144,7 @@ class Event(object):
 
     def trigger(self, scheduler):
         """
-        Test conditions and trigger execution if fulfilled
+        Test conditions and trigger execution if they are fulfilled
 
         Parameters
         ----------
@@ -117,7 +154,7 @@ class Event(object):
         Returns
         -------
         list of `Task`
-            a list of task that should be run
+            a list of new tasks that should be submitted
         """
         if self:
             if not self.has_running_tasks or not self._wait_for_completion:
@@ -221,68 +258,10 @@ class Event(object):
         return TasksFinished(self)
 
 
-class FunctionalEvent(Event):
-    """
-    An Event to wrap a python function
-
-    The function is executed on start and interrupted if you use `yield {condition to continue}`
-
-    To make writing of asynchronous code easy you can use this wrapper class. Usually you
-    start by opening a scheduler that you submit tasks to. Then submit a first task or
-    yield a condition to wait for. Once this is met the code will continue to execute and
-    you can submit more tasks until finally you will close the scheduler
-
-    Attributes
-    ----------
-    generator : generator
-        the function (generator) to be used
-
-    """
-    def __init__(self, generator):
-        super(FunctionalEvent, self).__init__()
-
-        if not isinstance(generator, types.GeneratorType):
-            generator = generator()
-
-        assert isinstance(generator, types.GeneratorType)
-
-        self.do(generator)
-        self._running = True
-
-    def _update_conditions(self):
-        self._finish_conditions = filter(
-            lambda x: not x(), self._finish_conditions)
-
-    def __call__(self, scheduler):
-        if self._running:
-            try:
-                conditions = next(self._generator)
-                if conditions is not None:
-                    if isinstance(conditions, (tuple, list)):
-                        self._finish_conditions.extend(conditions)
-                    else:
-                        self._finish_conditions.append(conditions)
-                self._update_conditions()
-            except StopIteration:
-                self._running = False
-
-    def trigger(self, scheduler):
-        if self:
-            if self._until is not None and self._until():
-                self._running = False
-            else:
-                self._update_conditions()
-                while self._running and len(self._finish_conditions) == 0:
-                    self(scheduler)
-                    self._update_conditions()
-
-    def __nonzero__(self):
-        return self._running
-
-
 class TasksFinished(Condition):
     """
-    Condition to represent the completion of an `Event`
+    Condition to represent the completion of an event
+
     """
     def __init__(self, event):
         super(TasksFinished, self).__init__()
@@ -295,6 +274,7 @@ class TasksFinished(Condition):
 class StopEvent(Event):
     """
     Event that represents the termination of the used scheduler
+
     """
     def __call__(self, scheduler):
         return StopIteration
