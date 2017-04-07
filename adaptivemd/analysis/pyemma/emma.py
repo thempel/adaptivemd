@@ -170,28 +170,23 @@ class PyEMMAAnalysis(Analysis):
                 # ups, one of the trajectories does not have the required type!
                 return
 
+        if len(set(traj.types[outtype].stride for traj in trajs)) > 1:
+            # using different strides in trajectories
+            return
+
+        if len(set(traj.types[outtype].selection for traj in trajs)) > 1:
+            # different selection strings among trajectories
+            return
+
         ty = trajs[0].types[outtype]
 
-
-        engines = []
-        for traj in trajectories:
-            if traj.engine not in engines:
-                engines.append(traj.engine)
-        
-        if len(engines) > 1:
-            trajs = []
-            for traj in trajectories:
-                trajs.append(os.path.join(traj.location, traj.types[outtype].filename))
-            trajectory_file_name = ''
-        else:
-            trajs = list(trajectories)
-            trajectory_file_name = ty.filename
-
+        traj_paths = []
+        for traj in trajs:
+            traj_paths.append(traj.file(traj.types[outtype].filename).path)
 
         t.call(
             remote_analysis,
-            trajectories=trajs,
-            traj_name=trajectory_file_name,  # we need the filename in the traj folder
+            trajectories=traj_paths,
             selection=ty.selection,  # tell pyemma the subsets of atoms
             features=features,
             topfile=input_pdb,
