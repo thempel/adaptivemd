@@ -25,7 +25,8 @@
 
 
 def remote_analysis(
-        trajectories,
+        trajectory_paths,
+        trajectory_objects=None,
         selection=None,
         features=None,
         topfile='input.pdb',
@@ -39,7 +40,8 @@ def remote_analysis(
 
     Parameters
     ----------
-    trajectories : Trajectory file paths
+    trajectory_paths : Trajectory file paths
+    trajectory_objects: adaptivemd.Trajectory objects corresponding to given paths
     selection : str
         an atom subset selection string as used in mdtraj .select
     features : dict or list or None
@@ -81,8 +83,6 @@ def remote_analysis(
         a model object with a data attribute which is a dict and contains all relevant
         information about the computed MSM
     """
-    import os
-
     import pyemma
     import mdtraj as md
 
@@ -116,9 +116,9 @@ def remote_analysis(
 
     pyemma.config.show_progress_bars = False
 
-    print '#trajectories :', len(trajectories)
+    print '#trajectories :', len(trajectory_paths)
 
-    inp = pyemma.coordinates.source(trajectories, feat)
+    inp = pyemma.coordinates.source(trajectory_paths, feat)
 
     tica_obj = pyemma.coordinates.tica(
         inp, lag=tica_lag, dim=tica_dim, kinetic_map=False)
@@ -145,7 +145,7 @@ def remote_analysis(
             'lagtime': tica_lag
         },
         'clustering': {
-            'k': msm_states,
+            'n_clusters': msm_states,
             'dtrajs': [
                 t for t in cl.dtrajs
             ]

@@ -366,8 +366,9 @@ class Scheduler(object):
         path = path.replace('worker://', '')
         path = path.replace('file://', '')
         # the specific project folder://
-        path = path.replace(
-            'project://', '../../projects/' + self.project.name)
+        if self.project is not None:
+            path = path.replace(
+                'project://', '../../projects/' + self.project.name)
 
         return path
 
