@@ -514,7 +514,7 @@ class Project(object):
             assert(isinstance(model, Model))
             data = model.data
 
-            n_states = data['clustering']['k']
+            n_states = data['clustering']['n_clusters']
             modeller = data['input']['modeller']
 
             outtype = modeller.outtype

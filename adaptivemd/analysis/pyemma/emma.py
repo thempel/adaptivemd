@@ -27,6 +27,7 @@ from adaptivemd import PythonTask
 from adaptivemd.analysis import Analysis
 from adaptivemd.mongodb import DataDict
 from adaptivemd.model import Model
+from adaptivemd import WorkerScheduler
 
 from _remote import remote_analysis
 
@@ -99,7 +100,7 @@ class PyEMMAAnalysis(Analysis):
     @staticmethod
     def then_func(project, task, data, inputs):
         # add the input arguments for later reference
-        data['input']['trajectories'] = inputs['trajectories']
+        data['input']['trajectories'] = inputs['trajectory_objects']
         data['input']['pdb'] = inputs['topfile']
 
         # from the task we get the used generator and then its outtype
@@ -112,6 +113,7 @@ class PyEMMAAnalysis(Analysis):
     def execute(
             self,
             trajectories,
+            resource,
             tica_lag=2,
             tica_dim=2,
             msm_states=5,
@@ -179,14 +181,15 @@ class PyEMMAAnalysis(Analysis):
             return
 
         ty = trajs[0].types[outtype]
-
+        scheduler = WorkerScheduler(resource)
         traj_paths = []
         for traj in trajs:
-            traj_paths.append(traj.file(traj.types[outtype].filename).path)
+            traj_paths.append(scheduler.replace_prefix(traj.file(traj.types[outtype].filename).location))
 
         t.call(
             remote_analysis,
-            trajectories=traj_paths,
+            trajectory_paths=traj_paths,
+            trajectory_objects=trajs,
             selection=ty.selection,  # tell pyemma the subsets of atoms
             features=features,
             topfile=input_pdb,

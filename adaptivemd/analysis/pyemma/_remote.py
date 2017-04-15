@@ -25,10 +25,11 @@
 
 
 def remote_analysis(
-        trajectories,
+        trajectory_paths,
         selection=None,
         features=None,
         topfile='input.pdb',
+        trajectory_objects=None,
         tica_lag=2,
         tica_dim=2,
         msm_states=5,
@@ -39,7 +40,7 @@ def remote_analysis(
 
     Parameters
     ----------
-    trajectories : Trajectory file paths
+    trajectory_paths : Trajectory file paths
     selection : str
         an atom subset selection string as used in mdtraj .select
     features : dict or list or None
@@ -113,14 +114,14 @@ def remote_analysis(
 
         return simplex_surfs.reshape(simplex_surfs.shape[0], 1)
 
-    feat.add_custom_func(simplex_surface, 1)
-
-    inp = pyemma.coordinates.source(trajectories, feat)
+    #feat.add_custom_func(simplex_surface, 1)
+    feat.add_backbone_torsions()
+    inp = pyemma.coordinates.source(trajectory_paths, feat)
     y = inp.get_output()
 
 
     cl = pyemma.coordinates.cluster_regspace(data=y, dmin=.1, stride=stride)
-
+    m = pyemma.msm.estimate_markov_model(cl.dtrajs, msm_lag)
 
     data = {
         'input': {
@@ -142,6 +143,11 @@ def remote_analysis(
             ],
             'clustercenters': cl.clustercenters
         },
+        'msm': {
+            'lagtime': msm_lag,
+            'P': m.P,
+            'C': m.count_matrix_full
+        }
     }
 
     return data
