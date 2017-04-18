@@ -114,8 +114,8 @@ def remote_analysis(
 
         return simplex_surfs.reshape(simplex_surfs.shape[0], 1)
 
-    #feat.add_custom_func(simplex_surface, 1)
-    feat.add_backbone_torsions()
+    feat.add_custom_func(simplex_surface, 1)
+    
     inp = pyemma.coordinates.source(trajectory_paths, feat)
     y = inp.get_output()
 
