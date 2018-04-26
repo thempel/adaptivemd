@@ -66,6 +66,9 @@ def remote_analysis(
                 { 'select_backbone': None } ]}
             -> feat.add_inverse_distances(select_backbone())
 
+            {'add_minrmsd_to_ref': [pdb_file, {'atom_indices':[1,2,3]}]}
+            -> feat.add_minrmsd_to_ref(pdb_file, atom_indices=[1,2,3])
+
     topfile : `File`
         a reference to the full topology `.pdb` file using in pyemma
     tica_lag : int
@@ -105,7 +108,11 @@ def remote_analysis(
                 f = getattr(featurizer, func)
                 if attributes is None:
                     return f()
-                if isinstance(attributes, (list, tuple)):
+                #TODO: following line is neither elegant nor tested for arbitrary cases
+                if isinstance(attributes, (list, tuple)) and any([isinstance(a, dict) for a in attributes]):
+                    return f(*[a for a in attributes if not isinstance(a, dict)],
+                             **[a for a in attributes if isinstance(a, dict)][0])
+                elif isinstance(attributes, (list, tuple)):
                     return f(*apply_feat_part(featurizer, attributes))
                 else:
                     return f(apply_feat_part(featurizer, attributes))
