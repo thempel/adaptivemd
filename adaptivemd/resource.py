@@ -4,7 +4,6 @@
 # Copyright 2017 FU Berlin and the Authors
 #
 # Authors: Jan-Hendrik Prinz
-#          John Ossyra
 # Contributors:
 #
 # `adaptiveMD` is free software: you can redistribute it and/or modify
@@ -20,61 +19,56 @@
 # You should have received a copy of the GNU Lesser General Public
 # License along with MDTraj. If not, see <http://www.gnu.org/licenses/>.
 ##############################################################################
-from __future__ import absolute_import
+from __future__ import absolute_import, print_function
 
 
 from .mongodb import StorableMixin
-#from .task import DummyTask
-#from .configuration import Configuration
+from .task import DummyTask
 
 
 class Resource(StorableMixin):
     """
-    Runtime parameters to specify execution resources
-
-    queue <str> :
-        name of the queue to submit jobs to
-
-    total_cpus <int> :
-        total number of nodes to be used
-
-    total_time <int> :
-        total number of minutes for execution of a block of tasks
+    Representation of a shared FS with attached execution resources
 
     """
 
-    def __init__(self, total_cpus, total_time,
-                 total_gpus, destination=None):#, name):
-
+    def __init__(self, shared_path=None, wrapper=None):
         super(Resource, self).__init__()
+        if shared_path is None:
+            shared_path = '$HOME/adaptivemd/'
 
-        #assert isinstance(name, str)
-        #self.name = name
+        self.shared_path = shared_path
+        if wrapper is None:
+            wrapper = DummyTask()
 
-        assert isinstance(total_cpus, int)
-        self.total_cpus = total_cpus
-
-        assert isinstance(total_time, int)
-        self.total_time = total_time
-
-        assert isinstance(total_gpus, int)
-        self.total_gpus = total_gpus
-
-        if destination is None:
-            destination = ''
-
-        assert isinstance(destination, str)
-        self.destination = destination
+        self.wrapper = wrapper
 
 
-#del#    def __init__(self, shared_path=None, wrapper=None):
-#del#        super(Resource, self).__init__()
-#del#        if shared_path is None:
-#del#            shared_path = '$HOME/adaptivemd/'
-#del#
-#del#        self.shared_path = shared_path
-#del#        if wrapper is None:
-#del#            wrapper = DummyTask()
-#del#
-#del#        self.wrapper = wrapper
+class AllegroCluster(Resource):
+    """
+    The FUB Allegro cluster and its queues with shared FS on ``NO_BACKUP``
 
+    """
+    def __init__(self, shared_path=None):
+        if shared_path is None:
+            shared_path = '$HOME/NO_BACKUP/adaptivemd/'
+
+        super(AllegroCluster, self).__init__(shared_path=shared_path)
+
+    def add_cuda_module(self):
+        """
+        Add loading the CUDA module
+
+        """
+        w = self.wrapper
+        w.pre.append(
+            'export MODULEPATH=/import/ag_cmb/software/modules:$MODULEPATH')
+        w.pre.append('module load cuda/7.5')
+
+
+class LocalResource(Resource):
+    """
+    Run tasks locally and store results in ``$HOME/adaptivemd/``
+
+    """
+    pass

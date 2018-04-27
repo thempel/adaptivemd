@@ -63,4 +63,6 @@ from ._version import get_versions
 __version__ = get_versions()['version']
 del get_versions
 
+from .resource import AllegroCluster
+
 #from .rp.client import Client
