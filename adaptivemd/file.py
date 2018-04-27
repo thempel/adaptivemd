@@ -50,7 +50,7 @@ class Location(StorableMixin):
 
         if isinstance(location, Location):
             self.location = location.location
-        elif isinstance(location, (unicode, str)):
+        elif isinstance(location, str):
             self.location = str(location)
         else:
             raise ValueError('location can only be a `File` or a string.')
