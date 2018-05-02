@@ -141,7 +141,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    print 'GO...'
+    print('GO...')
 
     properties = None
 
@@ -164,11 +164,11 @@ if __name__ == '__main__':
     else:
         platform = Platform.getPlatformByName(args.platform)
 
-    print 'Reading PDB'
+    print('Reading PDB')
 
     pdb = PDBFile(args.topology_pdb)
 
-    print 'Done'
+    print('Done')
 
     with open(args.system_xml) as f:
         system_xml = f.read()
@@ -178,7 +178,7 @@ if __name__ == '__main__':
         integrator_xml = f.read()
         integrator = XmlSerializer.deserialize(integrator_xml)
 
-    print 'Initialize Simulation'
+    print('Initialize Simulation')
 
     try:
         simulation = Simulation(
@@ -192,7 +192,7 @@ if __name__ == '__main__':
         print('EXCEPTION', (socket.gethostname()))
         raise
 
-    print 'Done.'
+    print('Done.')
 
     print('# platform used:', simulation.context.getPlatform().getName())
 
@@ -232,7 +232,7 @@ if __name__ == '__main__':
     if args.types:
         # seems like we have JSON
         types_str = args.types.replace("'", '"')
-        print types_str
+        print(types_str)
         types = ujson.loads(types_str)
         if isinstance(types, dict):
             for name, opts in types.iteritems():
@@ -250,8 +250,8 @@ if __name__ == '__main__':
                         md.reporters.DCDReporter(
                             output_file, opts['stride'], atomSubset=atom_subset))
 
-                    print 'Writing stride %d to file `%s` with selection `%s`' % (
-                        opts['stride'], opts['filename'], opts['selection'])
+                    print('Writing stride %d to file `%s` with selection `%s`' % (
+                        opts['stride'], opts['filename'], opts['selection']))
 
     else:
         # use defaults from arguments
