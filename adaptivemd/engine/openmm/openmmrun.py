@@ -235,7 +235,7 @@ if __name__ == '__main__':
         print(types_str)
         types = ujson.loads(types_str)
         if isinstance(types, dict):
-            for name, opts in types.iteritems():
+            for name, opts in types.items():
                 if 'filename' in opts and 'stride' in opts:
                     output_file = os.path.join(output, opts['filename'])
 
