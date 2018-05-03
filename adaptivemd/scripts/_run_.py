@@ -35,10 +35,14 @@ a reference to the function and module as well as arguments and keyword argument
 
 if __name__ == '__main__':
     import importlib
+    import sys
+    sys.path.append('/data/scratch/thempel/adaptiveMD_JHP_test/adaptivemd')
+
     from adaptivemd.mongodb import ObjectJSON
     import os
     import sys
     sys.path.insert(0, os.path.abspath('.'))
+
 
     simplifier = ObjectJSON()
 
