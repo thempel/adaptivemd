@@ -20,6 +20,7 @@
 # License along with MDTraj. If not, see <http://www.gnu.org/licenses/>.
 ##############################################################################
 
+from __future__ import print_function
 
 # The remote function to be called py PyEMMAAnalysis
 
@@ -104,7 +105,7 @@ def remote_analysis(
     if features:
         def apply_feat_part(featurizer, parts):
             if isinstance(parts, dict):
-                func, attributes = parts.items()[0]
+                func, attributes = list(parts.items())[0]
                 f = getattr(featurizer, func)
                 if attributes is None:
                     return f()
@@ -127,7 +128,7 @@ def remote_analysis(
 
     pyemma.config.show_progress_bars = False
 
-    print '#trajectories :', len(trajectories)
+    print('#trajectories :', len(trajectories))
 
     files = [os.path.join(t, traj_name) for t in trajectories]
     inp = pyemma.coordinates.source(files, feat)
