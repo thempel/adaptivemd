@@ -132,13 +132,14 @@ def remote_analysis(
 
     files = [os.path.join(t, traj_name) for t in trajectories]
     inp = pyemma.coordinates.source(files, feat)
+    y = inp.get_output()
+    #tica_obj = pyemma.coordinates.tica(
+    #    inp, lag=tica_lag, dim=tica_dim, kinetic_map=False)
 
-    tica_obj = pyemma.coordinates.tica(
-        inp, lag=tica_lag, dim=tica_dim, kinetic_map=False)
+    #y = tica_obj.get_output()
 
-    y = tica_obj.get_output()
-
-    cl = pyemma.coordinates.cluster_kmeans(data=y, k=msm_states, stride=stride)
+    #cl = pyemma.coordinates.cluster_kmeans(data=y, k=msm_states, stride=stride)
+    cl = pyemma.coordinates.cluster_regspace(data=y, dmin=.1, stride=10)
     m = pyemma.msm.estimate_markov_model(cl.dtrajs, msm_lag)
 
     data = {
@@ -153,12 +154,8 @@ def remote_analysis(
             'features': features,
             'n_features': inp.dimension(),
         },
-        'tica': {
-            'dimension': tica_obj.dimension(),
-            'lagtime': tica_lag
-        },
         'clustering': {
-            'k': msm_states,
+            'k': cl.n_clusters,
             'dtrajs': [
                 t for t in cl.dtrajs
             ]
