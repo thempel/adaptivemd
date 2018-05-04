@@ -36,6 +36,8 @@ from uuid import UUID
 
 import six
 import ujson
+import pymongo
+import pickle
 
 import marshal
 import types
@@ -143,7 +145,8 @@ class ObjectJSON(object):
                 return {
                     '_numpy': self.simplify(obj.shape),
                     '_dtype': str(obj.dtype),
-                    '_data': base64.b64encode(obj.copy(order='C'))
+                    #'_data': base64.b64encode(obj.copy(order='C'))
+                    '_data': pymongo.binary.Binary(pickle.dumps( obj.copy(order='C'), protocol=2))
                 }
             elif hasattr(obj, 'to_dict'):
                 # the object knows how to dismantle itself into a json string
@@ -223,7 +226,8 @@ class ObjectJSON(object):
 
             elif '_numpy' in obj:
                 return np.frombuffer(
-                    base64.decodestring(bytes(obj['_data'], 'utf-8')),
+                    #base64.decodestring(bytes(obj['_data'], 'utf-8')),
+                    pickle.loads(obj['_data']),
                     dtype=np.dtype(obj['_dtype'])).reshape(
                         self.build(obj['_numpy'])
                 )
