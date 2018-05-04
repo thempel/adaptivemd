@@ -223,7 +223,7 @@ class ObjectJSON(object):
 
             elif '_numpy' in obj:
                 return np.frombuffer(
-                    base64.decodestring(obj['_data']),
+                    base64.decodestring(bytes(obj['_data'], 'utf-8')),
                     dtype=np.dtype(obj['_dtype'])).reshape(
                         self.build(obj['_numpy'])
                 )
